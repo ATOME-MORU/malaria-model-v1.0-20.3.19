@@ -1,0 +1,11 @@
+*.pdf
+*.ps
+*.prof
+perf/
+outputs*/
+temp*/
+.Trash-1000/
+*malaria_model_release_cuda
+*calibration.result*
+*calibration_raw*
+*S01E*

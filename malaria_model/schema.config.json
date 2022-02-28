@@ -1,0 +1,927 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+
+    "definitions" : {
+        "simulation" : {
+            "type": "object",
+            "properties" : {
+                "schema_file_name" : {
+                    "description" : "Location and name of the JSON schema file",
+                    "type" : "string"
+                },
+                "total_steps" : {
+                    "description" : "Length of simulation in days.",
+                    "type" : "integer",
+                    "minimum" : 0,
+                    "exclusiveMinimum" : false,
+                    "default" : "100"
+                },
+                "title" : {"type" : "string"},
+                "reports" : {
+                    "description" : "Select from a list of available reports",
+                    "type" : "object",
+                    "properties" : {
+                        "prevalence_daily" : {"type" : "boolean"},
+                        "genotype_weights" : {"type" : "boolean"},
+                        "drug_daily" : {"type" : "boolean"},
+                        "infection_daily" : {"type" : "boolean"},
+                        "infection_daily_village" : {"type" : "boolean"},
+                        "mosquito_daily" : {"type" : "boolean"},
+                        "treatment_daily" : {"type" : "boolean"}
+                    },
+                    "required" : [
+                        "prevalence_daily",
+                        "genotype_weights",
+                        "drug_daily",
+                        "infection_daily",
+                        "infection_daily_village",
+                        "mosquito_daily"
+                    ]
+                },
+                "plots" : {
+                    "description" : "Settings for plots",
+                    "type" : "object",
+                    "properties" : {
+                        "prevalence_daily_y_max" : {
+                            "description" : "Vertical axis max value.",
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "maximum" : 100,
+                            "default" : 40,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    },
+                    "required" : [
+                        "prevalence_daily_y_max"
+                    ]
+                },
+                "batch_mode" : {
+                    "description" : "In batch mode: live plots are disabled; cin.ignore() skipped.",
+                    "type" : "boolean"
+                },
+                "init_infections_from_regions" : {
+                    "description" : "Initialise infections per village according to regions file.",
+                    "type" : "boolean",
+                    "default" : true
+                },
+                "init_infections_from_agestruct" : {
+                    "description" : "Initialise infections per b_sys according to agestruct file.",
+                    "type" : "boolean",
+                    "default" : false
+                },
+                "export" : {
+                    "description" : "Trigger an export from b_sys at the end of the simulation.",
+                    "type" : "boolean",
+                    "default" : false
+                }
+            },
+            "required" : [
+                "schema_file_name",
+                "total_steps",
+                "title",
+                "reports",
+                "plots",
+                "batch_mode"
+            ]
+        },
+        "village" : {
+            "type" : "object",
+            "properties" : {
+                "data_file" : {
+                    "type" : "object",
+                    "properties" : {
+                        "name" : {"type" : "string"},
+                        "delimiter" : {"type" : "string"},
+                        "rows_to_read" : {
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "overwrite_ra_rate_if" : {
+                            "description" : "If the Ra rate column of the data file is to be overwritten.",
+                            "type" : "boolean",
+                            "default" : false
+                        },
+                        "overwrite_ra_rate_with" : {
+                            "description" : "The Ra rate used to overwrite the data file. This is applied to all villages.",
+                            "type" : "number",
+                            "default" : 0.1,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    },
+                    "required" : [
+                        "name",
+                        "delimiter",
+                        "rows_to_read",
+                        "overwrite_ra_rate_if",
+                        "overwrite_ra_rate_with"
+                    ]
+                }
+            },
+            "required" : ["data_file"]
+        },
+        "mobility" : {
+            "type" : "object",
+            "properties" : {
+                "enabled" : {
+                    "description" : "Enable mobility process",
+                    "type" : "boolean",
+                    "default" : true
+                },
+                "static_population_move_out_probability" : {
+                    "description" : "G_mobility_static = 125.0/365.0 = 0.3425, move to another village",
+                    "type" : "number",
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "static_population_return_home_probability" : {
+                    "description" : "G_static_return = 1.0/3.0 = 0.3333, length stay in another village",
+                    "type" : "number",
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "non_static_population_move_out_probability" : {
+                    "description" : "G_mobility_mobile = 125.0/365.0 = 0.3425, seasonal migrant",
+                    "type" : "number",
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "non_static_population_return_home_probability" : {
+                    "description" : "G_mobility_mobile = 1.0/3.0 = 0.3333, seasonal migrant",
+                    "type" : "number",
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                }
+            },
+            "required" : [
+                "static_population_move_out_probability",
+                "static_population_return_home_probability",
+                "non_static_population_move_out_probability",
+                "non_static_population_return_home_probability"
+            ]
+        },
+        "treatment" : {
+            "description" : "treatclinical[d] = (1.0/G_timecomp)*G_fullcourse*G_covab",
+            "type" : "object",
+            "properties" : {
+                "malaria_post" : {
+                    "description" : "treatment by malaria post",
+                    "type" : "object",
+                    "properties" : {
+                        "timecomp" : {
+                            "description" : "G_timecomp",
+                            "default" : 1.5,
+                            "type" : "number",
+                            "minimum" : 0.1,
+                            "exclusiveMinimum" : false
+                        },
+                        "fullcourse" : {
+                            "description" : "G_fullcourse = 0.9",
+                            "default" : 0.9,
+                            "type" : "number",
+                            "minimum" : 0.1,
+                            "exclusiveMinimum" : false
+                        },
+                        "covab" : {
+                            "description" : "G_covab = 0.9",
+                            "default" : 0.9,
+                            "type" : "number",
+                            "minimum" : 0.1,
+                            "exclusiveMinimum" : false
+                        },
+                        "nomp" : {
+                            "description" : "No malaria post. (G_nomp = 0.1)",
+                            "default" : 0.1,
+                            "type" : "number",
+                            "minimum" : 0.01,
+                            "exclusiveMinimum" : false
+                        },
+                        "asymptomatic_to_clinical_ratio" : {
+                            "description" : "0.0001 in G_trtasym=treatasympt[d]*0.0001;",
+                            "default" : 0.0001,
+                            "type" : "number",
+                            "minimum" : 0.000001,
+                            "exclusiveMinimum" : false
+                        },
+                        "establish_malaria_post_during_mda" : {
+                            "description" : "A malaria post is established / opened in the village when an MDA team has visited.",
+                            "type" : "boolean",
+                            "default" : true
+                        },
+                        "establish_malaria_post_during_survey" : {
+                            "description" : "A malaria post is established / opened in the village when a survey is conducted.",
+                            "type" : "boolean",
+                            "default" : false
+                        }
+                    }
+                },
+                "treatment_rate_mda" : {
+                    "description" : "G_tauab = 1.0/1.5;",
+                    "default" : 0.6666,
+                    "type" : "number",
+                    "minimum" : 0.000001,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "treat_clean_hosts" : {
+                    "description" : "If clean hosts are being treated, this happens when MDA is executed.",
+                    "type" : "boolean",
+                    "default" : true
+                },
+                "treat_asymptomatic_hosts" : {
+                    "description" : "If asymptomatic hosts are being treated, this happens when treatment by mp is executed",
+                    "type" : "boolean",
+                    "default" : true
+                },
+                "func_treatment_general_version" : {
+                    "description" : "General treatment function selector. (mp, mmc_wp2)",
+                    "default" : "mp",
+                    "type" : "string"
+                }
+            }
+        },
+        "infection" : {
+            "type" : "object",
+            "properties" : {
+                "init_with_uniform_prevalence_if" : {
+                    "description" : "If initial infected population is given uniformly across all villages",
+                    "type" : "boolean",
+                    "default" : false
+                },
+                "init_with_uniform_prevalence_with" : {
+                    "description" : "Prevalence across all villages",
+                    "type" : "number",
+                    "default" : 0.15
+                },
+                "init_transmission_coefficient_scaling_factor_a" : {
+                    "description" : "the 5.1 in 5.1/0.75",
+                    "type" : "number",
+                    "minimum" : 0.01,
+                    "exclusiveMinimum" : false
+                },
+                "init_transmission_coefficient_scaling_factor_b" : {
+                    "description" : "the 0.75 in 5.1/0.75",
+                    "type" : "number",
+                    "minimum" : 0.01,
+                    "exclusiveMinimum" : false
+                },
+                "transmission_coefficient_to_beta_scaling_factor" : {
+                    "description" : "betaf 0.83",
+                    "type" : "number",
+                    "minimum" : 0.000001,
+                    "exclusiveMinimum" : false
+                },
+                "use_all_infectious_bites" : {
+                    "description" : "Switch the infection function to use all infectious bites (As Drugrestest)",
+                    "type" : "boolean",
+                    "default" : false
+                },
+                "susceptibility_multiplier" : {
+                    "description" : "G_c",
+                    "type" : "number",
+                    "default" : 1.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "infectiousness_multiplier" : {
+                    "description" : "G_c",
+                    "type" : "number",
+                    "default" : 1.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                }
+            },
+            "required" : [
+                "init_with_uniform_prevalence_if",
+                "init_with_uniform_prevalence_with",
+                "init_transmission_coefficient_scaling_factor_a",
+                "init_transmission_coefficient_scaling_factor_b",
+                "transmission_coefficient_to_beta_scaling_factor",
+                "susceptibility_multiplier",
+                "infectiousness_multiplier"
+            ]
+        },
+        "mosquito" : {
+            "type" : "object",
+            "properties" : {
+                "init" : {
+                    "description" : "Used when initialising mosquito (bites) population",
+                    "type" : "object",
+                    "properties" : {
+                        "infected_mosquito_to_infected_human_ratio" : {
+                            "description" : "Probability of an infected mosquito per infected human",
+                            "type" : "number",
+                            "default" : 0.04,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false
+                        },
+                        "infectious_mosquito_to_infected_human_ratio" : {
+                            "description" : "Probability of an infectious mosquito per infected human",
+                            "type" : "number",
+                            "default" : 0.02,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false
+                        }                        
+                    }, 
+                    "required" : [
+                        "infected_mosquito_to_infected_human_ratio",
+                        "infectious_mosquito_to_infected_human_ratio"
+                    ]
+                },
+                "seasonality" : {
+                    "type" : "object",
+                    "properties" : {
+                        "switched_on" :{
+                            "description" : "If seasonality is applicable.",
+                            "type" : "boolean",
+                            "default" : true
+                        },
+                        "use_data_file" : {
+                            "description" : "If seasonality factor is to be read from file.",
+                            "type" : "boolean",
+                            "default" : false
+                        },
+                        "data_file" : {
+                            "type" : "object",
+                            "properties" : {
+                                "name" : {"type" : "string"}
+                            },
+                            "required" : ["name"]
+                        },
+                        "amplitude" : {
+                            "description" : "G_amp",
+                            "type" : "number",
+                            "default" : 0.9,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        },
+                        "amplitude_multiplier" : {
+                            "description" : "0.5 in (betas[i]*G_amp*0.5), only needed when read from file",
+                            "type" : "number",
+                            "default" : 0.5,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        },
+                        "cos_pi_multiplier" : {
+                            "description" : "2.0 in cos(2.0*3.1416*((double(timestep)-90.0)/365.0)",
+                            "type" : "number",
+                            "default" : 2.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false
+                        },
+                        "cos_days_offset" : {
+                            "description" : "90.0 in cos(2.0*3.1416*((double(timestep)-90.0)/365.0)",
+                            "type" : "number",
+                            "default" : 90.0,
+                            "minimum" : 0.0,
+                            "maximum" : 365.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    },
+                    "required" : [
+                        "switched_on",
+                        "use_data_file",
+                        "data_file",
+                        "amplitude",
+                        "amplitude_multiplier"
+                    ]
+                },
+                "incubation_days" : {
+                    "description" : "Extrinsic incubation period",
+                    "type" : "number",
+                    "default" : 14.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "infected_days" : {
+                    "description" : "Life expectancy of an exposed mosquito",
+                    "type" : "number",
+                    "default" : 20.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "infectious_days" : {
+                    "description" : "Life expectancy of an infectioius mosquito",
+                    "type" : "number",
+                    "default" : 7.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                }
+            },
+            "required" : [
+                "init",
+                "seasonality",
+                "incubation_days",
+                "exposed_days",
+                "infectious_days"
+            ]
+        },
+        "human" : {
+            "type": "object",
+            "properties" : {
+                "male_percentage" : {
+                    "description" : "0.482 - in accordance with 1998 census",
+                    "type" : "number",
+                    "default" : 0.482,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false,
+                    "maximum" : 1.0,
+                    "exclusiveMaximum" : false
+                },
+                "age_weight_vector_file" : {"type" : "string"},
+                "func_death_probability" : {
+                    "description" : "Death probability function",
+                    "type" : "object",
+                    "properties" : {
+                        "version" : {
+                            "description": "which function to use for death_probability",
+                            "type" : "integer",
+                            "default" : 2,
+                            "minimum" : 0,
+                            "maximum" : 21,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    },
+                    "required" : [
+                        "version"
+                    ]
+                }
+            },
+            "required" : [
+                "male_percentage",
+                "age_weight_vector_file",
+                "func_death_probability"
+            ]
+        },
+        "within_host" : {
+            "type": "object",
+            "properties" : {
+                "init_file" : {
+                    "type" : "object",
+                    "properties" : {
+                        "use_old_format" : {"type" : "boolean"},
+                        "name_old_format" : {"type" : "string"},
+                        "name" : {"type" : "string"},
+                        "delimiter" : {
+                            "description" : "not implemented, tab always",
+                            "type" : "string"
+                        },
+                        "use_age_column" : {"type" : "boolean"},
+                        "ra_rate" : {
+                            "description" : "rate of RA type infection",
+                            "type" : "number",
+                            "default" : 0.0,
+                            "minimum" : 0.0,
+                            "maximum" : 0.8,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    },
+                    "required" : ["name", "delimiter"]
+                },
+                "init_clinical_probability" : {
+                    "description" : "G_initclin",
+                    "type" : "number",
+                    "default" : 0.02,
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "susceptibility" : {
+                    "type" : "object",
+                    "properties" : {
+                        "default" : {
+                            "type" : "number",
+                            "default" : 1.0,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    }
+                },
+                "infectiousness" : {
+                    "type" : "object",
+                    "properties" : {
+                        "default" : {
+                            "type" : "number",
+                            "default" : 1.0,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        },
+                        "phi_a" : {
+                            "description" : "G_phia",
+                            "type" : "number",
+                            "default" : 0.5,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        },
+                        "phi_c" : {
+                            "description" : "G_phic",
+                            "type" : "number",
+                            "default" : 1.0,
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    }
+                },
+                "prophylaxis_effect" :{
+                    "description" : "G_artprophylaxis",
+                    "type" : "number",
+                    "default" : 1.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "func_clinical_probability_blood_to_infectious_version" : {
+                    "description" : "0 - karenjan17, 1 - drugrestest, 2 - mmc_wp2",
+                    "type" : "integer",
+                    "default" : 0,
+                    "minimum" : 0,
+                    "maximum" : 2,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "mellow_days" : {
+                    "description" : "G_mellow = 1.0/mellow_days",
+                    "type" : "number",
+                    "default" : 10.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "stage_progression" : {
+                    "type" : "object",
+                    "properties" : {
+                        "l2b_days_mean" : {
+                            "description" : "#days liver to blood. G_gamma = 1.0/5.0",
+                            "type" : "number",
+                            "default" : 5.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : true
+                        },
+                        "l2b_days_sd" : {
+                            "description" : "#days standard deviation liver to blood.",
+                            "type" : "number",
+                            "default" : 2.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : true
+                        },
+                        "b2i_days_mean" : {
+                            "description" : "#days blood to infectious. G_sigma = 1.0/15.0",
+                            "type" : "number",
+                            "default" : 15.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : true
+                        },
+                        "b2i_days_sd" : {
+                            "description" : "#days standard deviation blood to infectious.",
+                            "type" : "number",
+                            "default" : 5.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : true
+                        },
+                        "i2r_days_mean" : {
+                            "description" : "#days infectious to recovered. G_delta = 1.0/80.0",
+                            "type" : "number",
+                            "default" : 80.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : true
+                        },
+                        "i2r_days_sd" : {
+                            "description" : "#days standard deviation infectious to recovered.",
+                            "type" : "number",
+                            "default" : 2.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : true
+                        }
+                    },
+                    "required" : [
+                        "l2b_days_mean",
+                        "l2b_days_sd",
+                        "b2i_days_mean",
+                        "b2i_days_sd",
+                        "i2r_days_mean",
+                        "i2r_days_sd"
+                    ]
+                },
+                "natural_recovery_days" : {
+                    "description" : "G_delta = 1.0/natural_recovery_days. Replaced by i2r_days_mean",
+                    "type" : "number",
+                    "default" : 80.0,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "natural_recovery_resistance_cost" : {
+                    "description" : "Mutants carrying resistance have a higher probability to be cleared",
+                    "type" : "number",
+                    "default" : 0.01,
+                    "minimum" : 0.0,
+                    "exclusiveMinimum" : false
+                },
+                "immunity" : {
+                    "type" : "object",
+                    "properties" : {
+                        "days_until_loss_start" : {
+                            "type" : "integer",
+                            "default" : 40,
+                            "minimum" : 0,
+                            "exclusiveMinimum" : false
+                        },
+                        "level_until_loss_start" : {
+                            "type" : "integer",
+                            "default" : 1,
+                            "minimum" : 0,
+                            "exclusiveMinimum" : false
+                        },
+                        "loss_days" : {
+                            "description" : "G_alpha = 1.0/loss_days",
+                            "type" : "number",
+                            "default" : 60.0,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false
+                        }
+                    },
+                    "required" : [
+                        "days_until_loss_start",
+                        "level_until_loss_start",
+                        "loss_days"
+                    ]
+                }
+            },
+            "required" : [
+                "init_file",
+                "susceptibility",
+                "infectiousness",
+                "mellow_days",
+                "stage_progression",
+                "immunity"
+            ]
+        },
+        "drug" : {
+            "type" : "object",
+            "properties" : {
+                "failure_if_clinical_on_day" : {
+                    "description" : "Drug failure is recorded if the host is clinical on this number of days after drug given.",
+                    "type" : "integer",
+                    "default" : 28,
+                    "minimum" : 1,
+                    "exclusiveMinimum" : false
+                },
+                "drug_b_resistance" : {
+                    "description" : "Drug B efficacy multiplier for RB",
+                    "type" : "number",
+                    "default" : 0.5,
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                },
+                "drug_ab_resistance" : {
+                    "description" : "Drug AB efficacy multiplier for RB",
+                    "type" : "number",
+                    "default" : 0.9,
+                    "minimum" : 0.0,
+                    "maximum" : 1.0,
+                    "exclusiveMinimum" : false,
+                    "exclusiveMaximum" : false
+                }
+            },
+            "required" : ["failure_if_clinical_on_day"]
+        },
+        "genotype" : {
+            "type": "object",
+            "properties" : {
+                "mutation_probabilities" : {
+                    "type" : "array",
+                    "items" : {
+                        "type" : "number",
+                        "minimum" : 0.0,
+                        "exclusiveMinimum" : false
+                    }
+                }
+            },
+            "required" : ["mutation_probabilities"]
+        },
+        "intervention" : {
+            "type" : "object",
+            "properties" : {
+                "itn" : {
+                    "type" : "object",
+                    "properties" : {
+                        "init_probability_per_human": {
+                            "description" : "G_itnprop",
+                            "type" : "number",
+                            "default" : 0.2,
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false,
+                            "maximum" : 1.0,
+                            "exclusiveMaximum" : false
+                        },
+                        "preference_indoor" : {
+                            "description" : "G_indoorpref",
+                            "default" : 0.95,
+                            "type" : "number",
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        },
+                        "preference_human" : {
+                            "description" : "G_antroph = 0.95",
+                            "default" : 0.95,
+                            "type" : "number",
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        },
+                        "effectiveness" : {
+                            "description" : "The 0.5 in G_itneffect = 0.5*G_antroph*G_indoorpref;",
+                            "default" : 0.5,
+                            "type" : "number",
+                            "minimum" : 0.0,
+                            "maximum" : 1.0,
+                            "exclusiveMinimum" : false,
+                            "exclusiveMaximum" : false
+                        }
+                    },
+                    "required" : [
+                        "init_probability_per_human",
+                        "preference_indoor",
+                        "preference_human",
+                        "effectiveness"
+                    ]
+                },
+                "mda" : {
+                    "type" : "object",
+                    "properties" : {
+                        "enabled" : {
+                            "description" : "Enable MDA actions",
+                            "type" : "boolean",
+                            "default" : false
+                        },
+                        "num_teams" : {
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "schedule" : {
+                            "type" : "array",
+                            "items" : {
+                                "type" : "integer",
+                                "minimum" : 0,
+                                "exclusiveMinimum" : false
+                            }
+                        },
+
+                        "num_days_spent_in_village" : {
+                            "default" : 4,
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "num_drug_rounds" : {
+                            "default" : 3,
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "num_days_between_drug_rounds" : {
+                            "default" : 32,
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        }
+
+                    },
+                    "required" : [
+                        "num_teams",
+                        "schedule",
+                        "num_days_spent_in_village",
+                        "num_drug_rounds",
+                        "num_days_between_drug_rounds"
+                    ]
+                },
+                "fmda" : {
+                    "type" : "object",
+                    "properties" : {
+                        "enabled" : {
+                            "description" : "Enable fMDA actions",
+                            "type" : "boolean",
+                            "default" : false
+                        },
+                        "num_teams" : {
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "schedule" : {
+                            "type" : "array",
+                            "items" : {
+                                "type" : "integer",
+                                "minimum" : 0,
+                                "exclusiveMinimum" : false
+                            }
+                        },
+
+                        "num_days_spent_in_village" : {
+                            "default" : 4,
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "num_drug_rounds" : {
+                            "default" : 3,
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+                        "num_days_between_drug_rounds" : {
+                            "default" : 32,
+                            "type" : "integer",
+                            "minimum" : 1,
+                            "exclusiveMinimum" : false
+                        },
+
+                        "pcr_sensitivity" : {
+                            "type" : "number",
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false,
+                            "maximum" : 1.0,
+                            "exclusiveMaximum" : false
+                        },
+                        "pcr_sample_size" : {
+                            "type" : "integer",
+                            "minimum" : 10,
+                            "exclusiveMinimum" : false
+                        },
+                        "prevalence_threshold" : {
+                            "type" : "number",
+                            "minimum" : 0.0,
+                            "exclusiveMinimum" : false,
+                            "maximum" : 1.0,
+                            "exclusiveMaximum" : false
+                        }
+
+                    },
+                    "required" : [
+                        "num_teams",
+                        "schedule",
+                        "num_days_spent_in_village",
+                        "num_drug_rounds",
+                        "num_days_between_drug_rounds",
+                        "pcr_sensitivity",
+                        "pcr_sample_size",
+                        "prevalence_threshold"
+                    ]
+                }
+            },
+            "required" : ["itn","mda"]
+        }
+    },
+
+    "type" : "object",
+    "properties": {
+        "simulation" : {"$ref" : "#/definitions/simulation"},
+        "village" : {"$ref" : "#/definitions/village"},
+        "mobility" : {"$ref" : "#/definitions/mobility"},
+        "human" : {"$ref" : "#/definitions/human"},
+        "within_host" : {"$ref" : "#/definitions/within_host"},
+        "drug" : {"$ref" : "#/definitions/drug"},
+        "intervention" : {"$ref" : "#/definitions/intervention"}
+    },
+    "required" : [
+        "simulation",
+        "village",
+        "mobility",
+        "human",
+        "within_host",
+        "drug",
+        "intervention"
+    ]
+}
